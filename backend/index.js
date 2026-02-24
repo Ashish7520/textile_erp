@@ -10,6 +10,8 @@ const authRoutes = require("./routes/authRoutes");
 const fabricRoutes = require("./routes/fabricRoutes");
 const cuttingRoutes = require("./routes/cuttingRoutes"); // <--- NEW LINE
 const stitchingRoutes = require("./routes/stitchingRoutes");
+const { initDB } = require("./models");
+initDB();
 
 const wageRoutes = require("./routes/wageRoutes"); // New Route
 const path = require("path");

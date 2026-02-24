@@ -61,6 +61,7 @@ WagePayment.belongsTo(User);
 
 module.exports = {
   sequelize,
+  initDB,
   User,
   Fabric,
   CuttingJob,
