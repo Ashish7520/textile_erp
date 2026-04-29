@@ -1,4 +1,5 @@
-import { useState } from "react";
+// client/src/pages/Login.jsx
+import { useState, useEffect } from "react"; // <-- Added useEffect
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import API_URL from "../config";
@@ -9,6 +10,14 @@ function Login() {
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
+  // --- NEW LOGIC: Auto-Redirect if already logged in ---
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      navigate("/dashboard");
+    }
+  }, [navigate]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -16,9 +25,12 @@ function Login() {
         username,
         password,
       });
+
+      localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
+
       alert("Login Successful");
-      navigate("/dashboard");
+      navigate("/dashboard"); // This will now work instantly!
     } catch (err) {
       alert(err.response?.data?.error || "Login Failed");
     }
@@ -67,4 +79,5 @@ function Login() {
     </div>
   );
 }
+
 export default Login;
