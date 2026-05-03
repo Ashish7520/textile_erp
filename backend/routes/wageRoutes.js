@@ -12,4 +12,6 @@ router.post("/pay", wageController.addPayment);
 // Route to get payment history
 router.get("/history", wageController.getAllPayments);
 
+router.get("/user-history/:userId", wageController.getUserPayments);
+
 module.exports = router;

@@ -12,14 +12,11 @@ const { Op } = require("sequelize");
 exports.addPayment = async (req, res) => {
   try {
     const { userId, amount, type } = req.body;
-
-    // Note: We use 'userId' (lowercase) here because Sequelize aliases it automatically during creation
     const payment = await WagePayment.create({
-      UserId: userId, // Explicitly map to UserId to be safe
+      UserId: userId,
       amount,
       type,
     });
-
     res.json({ message: "Payment Recorded", payment });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -33,24 +30,16 @@ exports.getUserSummary = async (req, res) => {
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    // --- THE FIX IS HERE ---
-    // We must look for 'UserId' (Capital U) to match the database column
     const payments = await WagePayment.findAll({ where: { UserId: userId } });
-
     const totalAdvance = payments.reduce((sum, p) => sum + p.amount, 0);
 
     let totalEarned = 0;
 
-    // B. Calculate Earnings based on Role
     if (user.role === "cutting_man") {
       totalEarned = user.fixed_salary || 0;
     } else if (user.role === "employee") {
-      // Only count COMPLETED tasks (verified by manager)
       const tasks = await StitchingTask.findAll({
-        where: {
-          employeeId: userId,
-          status: "completed",
-        },
+        where: { employeeId: userId, status: "completed" },
         include: [{ model: CuttingJob, include: [GarmentType] }],
       });
 
@@ -70,16 +59,29 @@ exports.getUserSummary = async (req, res) => {
       outstanding,
     });
   } catch (err) {
-    console.error("Wage Summary Error:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// 3. Get All Payments (History)
+// 3. Get All Payments (Owner History)
 exports.getAllPayments = async (req, res) => {
   try {
     const payments = await WagePayment.findAll({
       include: [{ model: User, attributes: ["username"] }],
+      order: [["createdAt", "DESC"]],
+    });
+    res.json(payments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// --- NEW: 4. Get Payment History for ONE User ---
+exports.getUserPayments = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const payments = await WagePayment.findAll({
+      where: { UserId: userId },
       order: [["createdAt", "DESC"]],
     });
     res.json(payments);

@@ -1,8 +1,8 @@
 // server/controllers/authController.js
 const { User } = require("../models");
-const jwt = require("jsonwebtoken"); // <--- ADDED JWT
+const jwt = require("jsonwebtoken");
 
-// 1. REGISTER USER (Simple)
+// 1. REGISTER USER
 exports.register = async (req, res) => {
   try {
     const { username, password, role, fixedSalary } = req.body;
@@ -24,25 +24,22 @@ exports.register = async (req, res) => {
   }
 };
 
-// 2. LOGIN USER (With JWT Token)
+// 2. LOGIN USER
 exports.login = async (req, res) => {
   try {
     const { username, password } = req.body;
     const user = await User.findOne({ where: { username } });
 
-    // Simple Text Comparison
     if (!user || user.password !== password) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Generate the JWT Token (Valid for 1 day)
     const token = jwt.sign(
       { id: user.id, role: user.role },
       "YOUR_SECRET_KEY",
       { expiresIn: "1d" },
     );
 
-    // Send BOTH the token and the user data back to the browser
     res.json({
       message: "Login successful",
       token: token,
@@ -53,13 +50,14 @@ exports.login = async (req, res) => {
   }
 };
 
-// 3. GET USERS BY ROLE
+// 3. GET USERS BY ROLE (THE FIX IS HERE)
 exports.getUsersByRole = async (req, res) => {
   try {
     const { role } = req.params;
     const users = await User.findAll({
       where: { role },
-      attributes: ["id", "username", "fixed_salary"],
+      // WE ADDED 'role' HERE SO THE FRONTEND DOES NOT CRASH!
+      attributes: ["id", "username", "role", "fixed_salary"],
     });
     res.json(users);
   } catch (err) {
@@ -67,7 +65,7 @@ exports.getUsersByRole = async (req, res) => {
   }
 };
 
-// 4. SEED ADMIN (Simple)
+// 4. SEED ADMIN
 exports.seedAdmin = async () => {
   try {
     const admin = await User.findOne({ where: { role: "owner" } });

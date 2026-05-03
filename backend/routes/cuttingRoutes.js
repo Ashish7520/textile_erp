@@ -3,15 +3,11 @@ const express = require("express");
 const router = express.Router();
 const cuttingController = require("../controllers/cuttingController");
 
-// Create a job (Start work)
+// These MUST match the 5 "exports.____" names in the controller exactly!
 router.post("/create", cuttingController.createJob);
-
-// Finish a job (Enter meters used)
+router.get("/pending", cuttingController.getPendingJobs);
+router.get("/my-jobs/:cutterId", cuttingController.getMyJobs);
 router.post("/finish", cuttingController.finishJob);
-
-// Get my jobs
-router.get("/my-jobs/:userId", cuttingController.getMyJobs);
-router.get("/all-pending", cuttingController.getAllPendingJobs);
-router.get("/completed", cuttingController.getCompletedJobs);
+router.get("/history/:cutterId", cuttingController.getCuttingHistory);
 
 module.exports = router;

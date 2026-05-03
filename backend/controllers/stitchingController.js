@@ -176,3 +176,21 @@ exports.getAllStitching = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+// 7. Get Completed Work History for an Employee
+exports.getEmployeeHistory = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const history = await StitchingTask.findAll({
+      where: {
+        employeeId: employeeId,
+        status: "completed", // ONLY fetch verified/completed work
+      },
+      include: [{ model: CuttingJob, include: [Fabric, GarmentType] }],
+      order: [["completed_at", "DESC"]], // Show newest first
+    });
+    res.json(history);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

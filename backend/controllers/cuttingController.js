@@ -1,115 +1,43 @@
 // server/controllers/cuttingController.js
-const { CuttingJob, Fabric, User, GarmentType } = require("../models");
+const { CuttingJob, Fabric, GarmentType, User } = require("../models");
 
-// 1. Create a SMART Job (Auto-Calculate Meters)
+// 1. Create a new Cutting Job
 exports.createJob = async (req, res) => {
   try {
-    console.log("--- STARTING CREATE JOB ---");
-    console.log("Received Body:", req.body); // DEBUG 1
+    const { sku, garmentId, pieces, size, cutterId } = req.body;
+    const fabric = await Fabric.findOne({ where: { sku } });
+    const garment = await GarmentType.findByPk(garmentId);
 
-    const { sku, garmentId, pieces, cutterId, size } = req.body;
-
-    // Validation
-    if (!garmentId) {
-      console.log("ERROR: garmentId is missing!");
-      return res.status(400).json({ error: "Please select a Garment Type" });
+    if (!fabric || !garment) {
+      return res
+        .status(404)
+        .json({ error: "Fabric or Garment Rule not found" });
     }
 
-    // 1. Get the Garment Rule
-    const garment = await GarmentType.findByPk(garmentId);
-    if (!garment)
-      return res.status(404).json({ error: "Garment Type not found in DB" });
-
-    console.log("Found Garment:", garment.name, "ID:", garment.id); // DEBUG 2
-
-    // 2. Find the Fabric
-    const fabric = await Fabric.findOne({ where: { sku } });
-    if (!fabric) return res.status(404).json({ error: "Fabric SKU not found" });
-
-    // 3. Auto-Calculate
-    const calculatedMeters = garment.meters_per_piece * pieces;
-
-    // 4. Create Job
     const job = await CuttingJob.create({
-      size: size,
-      planned_pieces: pieces,
-      meters_used: calculatedMeters,
-      status: "pending",
       FabricId: fabric.id,
-      // --- CRITICAL FIX: Ensure this exact spelling matches your DB Column ---
-      GarmentTypeId: garment.id,
+      GarmentTypeId: garmentId,
+
+      // Save the ID to assignedToId (as per your SQL DB)
       assignedToId: cutterId,
+
+      planned_pieces: pieces,
+      size: size,
+      status: "pending",
     });
 
-    console.log(
-      "Job Created Successfully with GarmentTypeId:",
-      job.GarmentTypeId,
-    ); // DEBUG 3
-
-    res.json({
-      message: "Job Started",
-      job,
-      estimatedMeters: calculatedMeters,
-    });
-  } catch (err) {
-    console.error("CREATE JOB ERROR:", err); // DEBUG 4
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// 2. Finish Job (Deduct Stock)
-exports.finishJob = async (req, res) => {
-  try {
-    const { jobId, metersUsed } = req.body;
-    const job = await CuttingJob.findByPk(jobId, { include: Fabric });
-
-    if (!job) return res.status(404).json({ error: "Job not found" });
-    if (job.status === "completed")
-      return res.status(400).json({ error: "Job already completed" });
-
-    const fabric = job.Fabric;
-    fabric.current_meters -= parseFloat(metersUsed);
-    await fabric.save();
-
-    job.meters_used = metersUsed;
-    job.status = "completed";
-    await job.save();
-
-    res.json({
-      message: "Cutting Completed",
-      remaining_stock: fabric.current_meters,
-    });
+    res.json({ message: "Cutting Job Assigned", job });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// 3. Get Jobs for a specific Cutter
-exports.getMyJobs = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const jobs = await CuttingJob.findAll({
-      where: { assignedToId: userId },
-      include: [Fabric, GarmentType],
-      order: [["createdAt", "DESC"]], // Newest first
-    });
-    res.json(jobs);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// 4. Get ALL pending jobs (For Owner Overview)
-exports.getAllPendingJobs = async (req, res) => {
+// 2. Get Pending Jobs
+exports.getPendingJobs = async (req, res) => {
   try {
     const jobs = await CuttingJob.findAll({
       where: { status: "pending" },
-      include: [
-        Fabric,
-        GarmentType,
-        { model: User, as: "Cutter", attributes: ["username"] },
-      ],
-      order: [["createdAt", "DESC"]],
+      include: [Fabric, GarmentType, { model: User, as: "Cutter" }],
     });
     res.json(jobs);
   } catch (err) {
@@ -117,15 +45,57 @@ exports.getAllPendingJobs = async (req, res) => {
   }
 };
 
-// 5. Get Completed Jobs (For Stitching Dropdown)
-exports.getCompletedJobs = async (req, res) => {
+// 3. Get Active Jobs for a specific Cutter
+exports.getMyJobs = async (req, res) => {
   try {
+    const { cutterId } = req.params;
     const jobs = await CuttingJob.findAll({
-      where: { status: "completed" },
+      // FIX: Search specifically in the 'assignedToId' column!
+      where: { assignedToId: cutterId, status: "pending" },
       include: [Fabric, GarmentType],
-      order: [["updatedAt", "DESC"]],
     });
     res.json(jobs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 4. Finish a Cutting Job
+exports.finishJob = async (req, res) => {
+  try {
+    const { jobId, metersUsed } = req.body;
+    const job = await CuttingJob.findByPk(jobId, { include: [Fabric] });
+
+    if (!job) return res.status(404).json({ error: "Job not found" });
+
+    job.status = "completed";
+    job.meters_used = metersUsed ? parseFloat(metersUsed) : 0;
+    await job.save();
+
+    if (job.Fabric) {
+      const fabric = job.Fabric;
+      fabric.current_meters =
+        Number(fabric.current_meters) - Number(job.meters_used);
+      await fabric.save();
+    }
+
+    res.json({ message: "Job Completed and Inventory Deducted", job });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 5. Get Completed Work History
+exports.getCuttingHistory = async (req, res) => {
+  try {
+    const { cutterId } = req.params;
+    const history = await CuttingJob.findAll({
+      // FIX: Search specifically in the 'assignedToId' column!
+      where: { assignedToId: cutterId, status: "completed" },
+      include: [GarmentType, Fabric],
+      order: [["updatedAt", "DESC"]],
+    });
+    res.json(history);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
